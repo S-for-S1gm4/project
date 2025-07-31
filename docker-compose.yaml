@@ -1,0 +1,92 @@
+version: "3.8"
+
+services:
+  # Сервис базы данных PostgreSQL
+  database:
+    image: postgres:15-alpine
+    container_name: event-planner-db
+    environment:
+      POSTGRES_DB: event_planner
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres123
+    volumes:
+      # Монтируем локальную директорию для сохранения данных БД
+      - ./volumes/postgres:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - app-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Сервис очереди сообщений RabbitMQ
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: event-planner-rabbitmq
+    environment:
+      RABBITMQ_DEFAULT_USER: admin
+      RABBITMQ_DEFAULT_PASS: admin123
+    volumes:
+      # Монтируем раздел для сохранения очереди после перезагрузки
+      - ./volumes/rabbitmq:/var/lib/rabbitmq
+    ports:
+      - "5672:5672"    # AMQP порт
+      - "15672:15672"  # Management UI порт
+    networks:
+      - app-network
+    # Параметр для перезагрузки при сбоях
+    restart: on-failure
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Основной сервис приложения
+  app:
+    build: ./app/
+    image: event-planner-api:latest
+    container_name: event-planner-app
+    # Конфигурирование через переменные окружения
+    env_file:
+      - ./app/.env
+    environment:
+      # Дополнительные переменные окружения для подключения к БД и RabbitMQ
+      DATABASE_URL: postgresql://postgres:postgres123@database:5432/event_planner
+      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+    volumes:
+      # Подключаем исходные файлы через volumes
+      - ./app:/app
+    depends_on:
+      database:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+    networks:
+      - app-network
+    command: ["python", "main.py"]
+
+  # Веб-прокси сервис на основе Nginx
+  web-proxy:
+    build: ./nginx
+    image: event-planner-nginx:latest
+    container_name: event-planner-nginx
+    ports:
+      # Пробрасываем порты наружу
+      - "80:80"
+      - "443:443"
+    # Зависимость от сервиса app
+    depends_on:
+      - app
+    networks:
+      - app-network
+    volumes:
+      # Можно добавить SSL сертификаты при необходимости
+      # - ./nginx/ssl:/etc/nginx/ssl:ro
+
+networks:
+  app-network:
+    driver: bridge
