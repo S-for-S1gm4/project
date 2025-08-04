@@ -57,7 +57,7 @@ class Settings(BaseSettings):
         return f'amqp://{self.RABBITMQ_USER}:{self.RABBITMQ_PASSWORD}@{self.RABBITMQ_HOST}:{self.RABBITMQ_PORT}/'
 
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file="../.env",  # Ищем .env файл в родительской директории (корень проекта)
         env_file_encoding="utf-8",
         case_sensitive=True,
         # Позволяет переопределять значения через переменные окружения
@@ -101,7 +101,7 @@ def get_settings() -> Settings:
 
 # Функция для демонстрации загруженных настроек
 def print_settings_info():
-    """Вывод информации о загруженных настройках"""
+    """Вывод информации о загруженных настройках (без секретных данных)"""
     settings = get_settings()
 
     print("=== LOADED SETTINGS ===")

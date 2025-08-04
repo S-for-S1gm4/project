@@ -6,9 +6,9 @@ services:
     image: postgres:15-alpine
     container_name: event-planner-db
     environment:
-      POSTGRES_DB: event_planner
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres123
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
     volumes:
       # Монтируем локальную директорию для сохранения данных БД
       - postgres_volume:/var/lib/postgresql/data
@@ -17,18 +17,19 @@ services:
     networks:
       - app-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   # Сервис очереди сообщений RabbitMQ
   rabbitmq:
     image: rabbitmq:3-management-alpine
     container_name: event-planner-rabbitmq
     environment:
-      RABBITMQ_DEFAULT_USER: admin
-      RABBITMQ_DEFAULT_PASS: admin123
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     volumes:
       # Монтируем раздел для сохранения очереди после перезагрузки
       - rabbitmq_volume:/var/lib/rabbitmq
@@ -37,8 +38,7 @@ services:
       - "15672:15672" # Management UI порт
     networks:
       - app-network
-    # Параметр для перезагрузки при сбоях
-    restart: on-failure
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 30s
@@ -47,31 +47,51 @@ services:
 
   # Основной сервис приложения
   app:
-    build: ./app/
+    build:
+      context: ./app/
+      dockerfile: Dockerfile
     image: event-planner-api:latest
     container_name: event-planner-app
-    # Конфигурирование через переменные окружения
+
+    # Используем общий .env файл из корня проекта
     env_file:
-      - ./app/.env
+      - .env
+
+    # Дополнительные переменные окружения для Docker окружения
     environment:
-      # Дополнительные переменные окружения для подключения к БД и RabbitMQ
-      DATABASE_URL: postgresql://postgres:postgres123@database:5432/event_planner
-      RABBITMQ_URL: amqp://admin:admin123@rabbitmq:5672/
+      # Переопределяем хосты для Docker network
+      - DB_HOST=database
+      - RABBITMQ_HOST=rabbitmq
+
     volumes:
-      # Подключаем исходные файлы через volumes
+      # Подключаем исходные файлы через volumes для разработки
       - ./app:/app
+      # Создаем директорию для логов
+      - ./logs:/app/logs
+
+    ports:
+      # Пробрасываем порт приложения
+      - "${APP_PORT}:${APP_PORT}"
+
     depends_on:
       database:
         condition: service_healthy
       rabbitmq:
         condition: service_healthy
+
     networks:
       - app-network
+
+    restart: unless-stopped
+
+    # Команда запуска
     command: ["python", "main.py"]
 
   # Веб-прокси сервис на основе Nginx
-  web-proxy:
-    build: ./nginx
+  nginx:
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     image: event-planner-nginx:latest
     container_name: event-planner-nginx
     ports:
@@ -83,14 +103,19 @@ services:
       - app
     networks:
       - app-network
+    restart: unless-stopped
     volumes:
       # Можно добавить SSL сертификаты при необходимости
       # - ./nginx/ssl:/etc/nginx/ssl:ro
+      - ./logs/nginx:/var/log/nginx
 
 networks:
   app-network:
     driver: bridge
+    name: event-planner-network
 
 volumes:
   postgres_volume:
+    name: event-planner-postgres
   rabbitmq_volume:
+    name: event-planner-rabbitmq
