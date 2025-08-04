@@ -11,7 +11,7 @@ services:
       POSTGRES_PASSWORD: postgres123
     volumes:
       # Монтируем локальную директорию для сохранения данных БД
-      - ./volumes/postgres:/var/lib/postgresql/data
+      - postgres_volume:/var/lib/postgresql/data
     ports:
       - "5432:5432"
     networks:
@@ -31,10 +31,10 @@ services:
       RABBITMQ_DEFAULT_PASS: admin123
     volumes:
       # Монтируем раздел для сохранения очереди после перезагрузки
-      - ./volumes/rabbitmq:/var/lib/rabbitmq
+      - rabbitmq_volume:/var/lib/rabbitmq
     ports:
-      - "5672:5672"    # AMQP порт
-      - "15672:15672"  # Management UI порт
+      - "5672:5672" # AMQP порт
+      - "15672:15672" # Management UI порт
     networks:
       - app-network
     # Параметр для перезагрузки при сбоях
@@ -90,3 +90,7 @@ services:
 networks:
   app-network:
     driver: bridge
+
+volumes:
+  postgres_volume:
+  rabbitmq_volume:
