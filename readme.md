@@ -7,9 +7,8 @@
 ```
 project/
 ├── .env                    # Единый файл переменных окружения
-├── .env.example           # Пример конфигурации
+├── .env.template           # Пример конфигурации
 ├── docker-compose.yaml    # Конфигурация Docker Compose
-├── Makefile              # Команды для управления проектом
 ├── README.md
 ├── app/                  # Основное приложение
 │   ├── Dockerfile
