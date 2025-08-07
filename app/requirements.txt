@@ -1,8 +1,46 @@
+# FastAPI и веб-сервер
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# База данных
 SQLAlchemy==2.0.31
 sqlmodel==0.0.14
 psycopg2-binary==2.9.9
-pika==1.3.2
-python-dotenv==1.0.0
 alembic==1.13.1
+
+# Валидация данных
 pydantic==2.5.0
 pydantic-settings==2.1.0
+
+# Аутентификация и безопасность
+PyJWT==2.8.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+python-dotenv==1.0.0
+
+# HTTP клиент и CORS
+httpx==0.25.0
+python-cors==1.0.1
+
+# Email валидация
+email-validator==2.1.0
+
+# Очереди сообщений
+pika==1.3.2
+
+# Telegram Bot
+python-telegram-bot==20.7
+
+# Утилиты для разработки
+pytest==7.4.3
+pytest-asyncio==0.21.1
+requests==2.31.0
+
+# Логирование и мониторинг (мне удобнее этот, а не вариант из лекции про апи)
+structlog==23.2.0
+
+# Дополнительные зависимости для ML
+scikit-learn==1.3.2
+numpy==1.25.2
+pandas==2.1.4
