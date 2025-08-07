@@ -48,30 +48,25 @@ services:
   # Основной сервис приложения
   app:
     build:
-      context: ./app/
+      context: ./app
       dockerfile: Dockerfile
     image: event-planner-api:latest
     container_name: event-planner-app
 
-    # Используем общий .env файл из корня проекта
     env_file:
       - .env
 
-    # Дополнительные переменные окружения для Docker окружения
     environment:
-      # Переопределяем хосты для Docker network
       - DB_HOST=database
       - RABBITMQ_HOST=rabbitmq
+      - PYTHONPATH=/app
 
     volumes:
-      # Подключаем исходные файлы через volumes для разработки
       - ./app:/app
-      # Создаем директорию для логов
       - ./logs:/app/logs
 
     ports:
-      # Пробрасываем порт приложения
-      - "${APP_PORT}:${APP_PORT}"
+      - "${APP_PORT:-8080}:${APP_PORT:-8080}"
 
     depends_on:
       database:
@@ -84,8 +79,16 @@ services:
 
     restart: unless-stopped
 
-    # Команда запуска
-    command: ["python", "main.py"]
+    # FastAPI с uvicorn
+    command:
+      ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8080", "--reload"]
+
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
 
   # Веб-прокси сервис на основе Nginx
   nginx:
