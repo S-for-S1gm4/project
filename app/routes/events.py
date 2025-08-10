@@ -1,5 +1,6 @@
 """
 Маршруты для работы с событиями
+Обновленная версия для структурированной архитектуры
 """
 from fastapi import APIRouter, HTTPException, Depends, status, Query
 from typing import List, Optional
@@ -13,7 +14,7 @@ from schemas.event import (
 )
 from services.user_service import UserService
 from services.event_service import EventService
-from core.auth import get_current_user, get_current_user_optional, require_event_creator_or_admin
+from core.auth import get_current_user, get_current_user_optional
 from core.exceptions import (
     EventNotFoundException, InsufficientBalanceException,
     EventFullException, EventNotActiveException, ValidationException,
@@ -23,6 +24,15 @@ from core.exceptions import (
 logger = logging.getLogger(__name__)
 
 event_router = APIRouter(prefix="/api/events", tags=["Events"])
+
+
+def check_event_creator_or_admin(event, current_user):
+    """Вспомогательная функция для проверки прав на событие"""
+    if event.creator_id != current_user.id and current_user.role != "admin":
+        raise PermissionDeniedException(
+            action="modify event",
+            resource=f"event {event.id}"
+        )
 
 
 @event_router.get("/", response_model=List[EventResponse])
@@ -193,7 +203,7 @@ async def update_event(
     event_data: EventUpdateRequest,
     current_user = Depends(get_current_user)
 ):
-    """Обновление события (только создатель)"""
+    """Обновление события (только создатель или админ)"""
     try:
         # Получаем событие
         event = EventService.get_event_by_id(event_id)
@@ -201,7 +211,7 @@ async def update_event(
             raise EventNotFoundException(event_id)
 
         # Проверяем права
-        require_event_creator_or_admin(event, current_user)
+        check_event_creator_or_admin(event, current_user)
 
         # В реальном приложении здесь была бы функция обновления
         logger.info(f"Event update requested: {event_id} by user {current_user.id}")
@@ -221,8 +231,9 @@ async def update_event(
         )
 
     except (EventNotFoundException, PermissionDeniedException) as e:
+        error_code = status.HTTP_404_NOT_FOUND if isinstance(e, EventNotFoundException) else status.HTTP_403_FORBIDDEN
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, EventNotFoundException) else status.HTTP_403_FORBIDDEN,
+            status_code=error_code,
             detail=e.message
         )
     except Exception as e:
@@ -253,7 +264,7 @@ async def join_event(
         success = EventService.join_event(current_user.id, event_id)
 
         if not success:
-            # Определяем причину неудачи
+            # Определяем причину неудачи более точно
             if not event.can_join():
                 if event.status != "active":
                     raise EventNotActiveException(event.title, event.status)
@@ -263,6 +274,7 @@ async def join_event(
             if event.cost > current_user.balance:
                 raise InsufficientBalanceException(event.cost, current_user.balance)
 
+            # Общая ошибка, если не можем определить причину
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot join event"
@@ -310,7 +322,7 @@ async def activate_event(
             raise EventNotFoundException(event_id)
 
         # Проверяем права
-        require_event_creator_or_admin(event, current_user)
+        check_event_creator_or_admin(event, current_user)
 
         # Активируем событие
         success = EventService.activate_event(event_id)
@@ -330,8 +342,9 @@ async def activate_event(
         )
 
     except (EventNotFoundException, PermissionDeniedException) as e:
+        error_code = status.HTTP_404_NOT_FOUND if isinstance(e, EventNotFoundException) else status.HTTP_403_FORBIDDEN
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, EventNotFoundException) else status.HTTP_403_FORBIDDEN,
+            status_code=error_code,
             detail=e.message
         )
     except Exception as e:
@@ -367,7 +380,7 @@ async def predict_event_participation(
         past_participation = prediction_data.user_features.get('past_participation', 0.5)
         event_type_preference = prediction_data.user_features.get('event_type_preference', 0.5)
 
-        # Расчет вероятности
+        # Расчет вероятности с улучшенной логикой
         if not can_afford:
             prediction = "unlikely_to_join"
             confidence = 0.2 + (balance_ratio * 0.3)
@@ -400,15 +413,15 @@ async def predict_event_participation(
         # Ограничиваем confidence
         confidence = min(confidence, 0.95)
 
-        # Записываем запрос в историю
+        # Записываем запрос в историю (с обработкой ошибок)
         try:
             UserService.add_balance(
                 current_user.id,
                 0.0,
                 f"ML prediction request for event: {event.title}"
             )
-        except:
-            pass  # Игнорируем ошибки записи
+        except Exception as log_error:
+            logger.warning(f"Failed to log prediction request: {log_error}")
 
         logger.info(f"Prediction generated for user {current_user.id}, event {prediction_data.event_id}")
 
@@ -448,25 +461,31 @@ async def get_prediction_history(current_user = Depends(get_current_user)):
         # Группируем по событиям
         predictions_by_event = {}
         for t in prediction_transactions:
-            event_name = t.description.split(":")[-1].strip()
-            if event_name not in predictions_by_event:
-                predictions_by_event[event_name] = []
-            predictions_by_event[event_name].append({
-                "id": t.id,
-                "requested_at": t.created_at,
-                "status": t.status
-            })
+            try:
+                event_name = t.description.split(":")[-1].strip()
+                if event_name not in predictions_by_event:
+                    predictions_by_event[event_name] = []
+                predictions_by_event[event_name].append({
+                    "id": t.id,
+                    "requested_at": t.created_at,
+                    "status": t.status
+                })
+            except (IndexError, AttributeError):
+                continue  # Пропускаем некорректные записи
 
         from schemas.event import PredictionHistoryEntry
-        recent_predictions = [
-            PredictionHistoryEntry(
-                id=t.id,
-                event_name=t.description.split(":")[-1].strip(),
-                requested_at=t.created_at,
-                status=t.status
-            )
-            for t in prediction_transactions[:10]  # Последние 10
-        ]
+        recent_predictions = []
+        for t in prediction_transactions[:10]:  # Последние 10
+            try:
+                event_name = t.description.split(":")[-1].strip()
+                recent_predictions.append(PredictionHistoryEntry(
+                    id=t.id,
+                    event_name=event_name,
+                    requested_at=t.created_at,
+                    status=t.status
+                ))
+            except (IndexError, AttributeError):
+                continue  # Пропускаем некорректные записи
 
         return PredictionHistoryResponse(
             total_predictions=len(prediction_transactions),
@@ -553,7 +572,7 @@ async def get_event_participants(
             raise EventNotFoundException(event_id)
 
         # Проверяем права доступа
-        require_event_creator_or_admin(event, current_user)
+        check_event_creator_or_admin(event, current_user)
 
         # В реальном приложении здесь был бы запрос к БД для получения участников
         return EventParticipantsResponse(
@@ -565,8 +584,9 @@ async def get_event_participants(
         )
 
     except (EventNotFoundException, PermissionDeniedException) as e:
+        error_code = status.HTTP_404_NOT_FOUND if isinstance(e, EventNotFoundException) else status.HTTP_403_FORBIDDEN
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND if isinstance(e, EventNotFoundException) else status.HTTP_403_FORBIDDEN,
+            status_code=error_code,
             detail=e.message
         )
     except Exception as e:

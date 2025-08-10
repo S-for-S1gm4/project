@@ -9,7 +9,6 @@ import hashlib
 from typing import Optional
 import logging
 
-from services.user_service import UserService
 from database.config import get_settings
 from .exceptions import InvalidCredentialsException, UserNotFoundException
 
@@ -107,6 +106,9 @@ def get_current_user(credentials: HTTPAuthorizationCredentials = Depends(securit
     """
     try:
         payload = verify_jwt_token(credentials.credentials)
+
+        # Импорт внутри функции для избежания циклического импорта
+        from services.user_service import UserService
         user = UserService.get_user_by_id(payload['user_id'])
 
         if not user:
@@ -163,6 +165,9 @@ def verify_user_credentials(email: str, password: str):
     Raises:
         InvalidCredentialsException: При неверных учетных данных
     """
+    # Импорт внутри функции для избежания циклического импорта
+    from services.user_service import UserService
+
     user = UserService.get_user_by_email(email)
 
     if not user:

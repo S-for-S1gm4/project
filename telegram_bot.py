@@ -4,6 +4,9 @@ import hashlib
 import jwt
 from datetime import datetime, timedelta
 from typing import Optional, Dict
+from core.auth import hash_password  # Добавить этот импорт
+from core.exceptions import InvalidCredentialsException  # Добавить
+
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import (

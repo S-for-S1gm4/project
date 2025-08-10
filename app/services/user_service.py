@@ -2,6 +2,7 @@ from sqlmodel import Session, select
 from typing import Optional, List
 from models import User, UserRole, Transaction, TransactionType, TransactionStatus
 from database.database import get_db_session
+from core.exceptions import DuplicateUserException
 import hashlib
 import logging
 
@@ -30,7 +31,11 @@ class UserService:
             ).first()
 
             if existing_user:
-                raise ValueError(f"User with email {email} or username {username} already exists")
+                # Используем кастомное исключение
+                if existing_user.email == email:
+                    raise DuplicateUserException(email=email)
+                else:
+                    raise DuplicateUserException(username=username)
 
             # Создаем нового пользователя
             user = User(
