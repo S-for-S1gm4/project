@@ -268,3 +268,132 @@ class EventActivationResponse(BaseModel):
                 "status": "active"
             }
         }
+
+class AsyncPredictionRequest(BaseModel):
+    """Схема запроса асинхронного предсказания"""
+    event_id: int
+    user_features: Dict[str, Any] = Field(default_factory=dict, description="Дополнительные характеристики пользователя")
+    priority: str = Field(default="normal", description="Приоритет обработки: low, normal, high")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "event_id": 1,
+                "user_features": {
+                    "interest_level": 0.8,
+                    "past_participation": 0.6,
+                    "event_type_preference": 0.7,
+                    "time_flexibility": 0.9
+                },
+                "priority": "normal"
+            }
+        }
+
+
+class AsyncPredictionResponse(BaseModel):
+    """Схема ответа асинхронного предсказания"""
+    task_id: str
+    status: str
+    message: str
+    event_id: int
+    estimated_processing_time_seconds: int
+    check_status_url: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "queued",
+                "message": "Prediction task has been queued for processing",
+                "event_id": 1,
+                "estimated_processing_time_seconds": 10,
+                "check_status_url": "/api/events/predict-status/550e8400-e29b-41d4-a716-446655440000"
+            }
+        }
+
+
+class MLPredictionResult(BaseModel):
+    """Схема результата ML предсказания"""
+    prediction: str
+    confidence: float
+    recommendation: str
+    feature_importance: Dict[str, float]
+    model_version: str
+    worker_id: str
+    processing_time_ms: int
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "prediction": "likely_to_join",
+                "confidence": 0.752,
+                "recommendation": "Good event match for your profile and budget",
+                "feature_importance": {
+                    "balance_ratio": 0.25,
+                    "interest_level": 0.30,
+                    "past_participation": 0.20,
+                    "event_popularity": 0.15
+                },
+                "model_version": "1.0",
+                "worker_id": "worker-1",
+                "processing_time_ms": 1250
+            }
+        }
+
+
+class PredictionStatusResponse(BaseModel):
+    """Схема ответа статуса предсказания"""
+    task_id: str
+    status: str  # queued, processing, completed, failed
+    result: Optional[MLPredictionResult] = None
+    error: Optional[str] = None
+    event_id: Optional[int] = None
+    processed_at: Optional[str] = None
+    message: Optional[str] = None
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "task_id": "550e8400-e29b-41d4-a716-446655440000",
+                "status": "completed",
+                "result": {
+                    "prediction": "likely_to_join",
+                    "confidence": 0.752,
+                    "recommendation": "Good event match",
+                    "feature_importance": {},
+                    "model_version": "1.0",
+                    "worker_id": "worker-1",
+                    "processing_time_ms": 1250
+                },
+                "event_id": 1,
+                "processed_at": "2024-01-15T10:30:00"
+            }
+        }
+
+
+class MLServiceHealthResponse(BaseModel):
+    """Схема ответа состояния ML сервиса"""
+    ml_service_status: str
+    rabbitmq_connection: str
+    active_workers: Optional[int] = None
+    queue_length: Optional[int] = None
+    error: Optional[str] = None
+    checked_at: str
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "ml_service_status": "healthy",
+                "rabbitmq_connection": "connected",
+                "active_workers": 3,
+                "queue_length": 5,
+                "checked_at": "2024-01-15T10:30:00"
+            }
+        }
+
+
+class BulkPredictionRequest(BaseModel):
+    """Схема запроса массового предсказания"""
+    event_ids: List[int] = Field(..., description="Список ID событий")
+    user_features: Dict[str, Any] = Field(default_factory=dict)
+    priority: str = Field(default="normal")

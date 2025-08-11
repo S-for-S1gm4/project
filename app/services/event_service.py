@@ -1,5 +1,6 @@
+# app/services/event_service.py
 from sqlmodel import Session, select
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 from models import Event, EventStatus, User, Transaction, TransactionType
 from database.database import get_db_session
 from services.user_service import UserService
@@ -136,3 +137,56 @@ class EventService:
             return list(session.exec(
                 select(Event).where(Event.creator_id == creator_id)
             ).all())
+
+    @staticmethod
+    def request_ml_prediction(user_id: int, event_id: int,
+                            user_features: Dict[str, Any]) -> Optional[str]:
+        """
+        Запрос ML предсказания через RabbitMQ
+
+        Args:
+            user_id: ID пользователя
+            event_id: ID события
+            user_features: Дополнительные характеристики пользователя
+
+        Returns:
+            task_id если задача отправлена, None если ошибка
+        """
+        try:
+            # Импортируем здесь, чтобы избежать циклических импортов
+            from ml_service.publisher import ml_publisher
+
+            # Проверяем существование пользователя и события
+            user = EventService.get_user_by_id_static(user_id)
+            event = EventService.get_event_by_id(event_id)
+
+            if not user:
+                logger.error(f"User {user_id} not found for ML prediction")
+                return None
+
+            if not event:
+                logger.error(f"Event {event_id} not found for ML prediction")
+                return None
+
+            # Отправляем задачу в очередь
+            task_id = ml_publisher.publish_prediction_task(
+                user_id=user_id,
+                event_id=event_id,
+                user_features=user_features
+            )
+
+            if task_id:
+                logger.info(f"ML prediction task {task_id} queued for user {user_id}, event {event_id}")
+            else:
+                logger.error("Failed to queue ML prediction task")
+
+            return task_id
+
+        except Exception as e:
+            logger.error(f"ML prediction request error: {e}")
+            return None
+
+    @staticmethod
+    def get_user_by_id_static(user_id: int) -> Optional[User]:
+        """Вспомогательный метод для получения пользователя"""
+        return UserService.get_user_by_id(user_id)
