@@ -10,7 +10,8 @@ import logging
 from schemas.event import (
     EventCreateRequest, EventUpdateRequest, EventResponse, JoinEventResponse,
     PredictionRequest, PredictionResponse, EventSearchResponse, EventActivationResponse,
-    EventsOverviewResponse, EventParticipantsResponse, PredictionHistoryResponse
+    EventsOverviewResponse, EventParticipantsResponse, PredictionHistoryResponse,
+    AsyncPredictionRequest, AsyncPredictionResponse, PredictionStatusResponse
 )
 from services.user_service import UserService
 from services.event_service import EventService
@@ -647,3 +648,65 @@ async def search_events(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to search events"
         )
+        # Новый эндпоинт для асинхронного предсказания
+        @event_router.post("/predict-async", response_model=AsyncPredictionResponse, status_code=status.HTTP_202_ACCEPTED)
+        async def predict_event_participation_async(
+            prediction_data: AsyncPredictionRequest,
+            current_user = Depends(get_current_user)
+        ):
+            """Отправляет асинхронную задачу на ML-предсказание участия в событии."""
+            try:
+                task_id = EventService.request_ml_prediction(
+                    user_id=current_user.id,
+                    event_id=prediction_data.event_id,
+                    user_features=prediction_data.user_features,
+                )
+
+                if not task_id:
+                    raise HTTPException(
+                        status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                        detail="ML service is temporarily unavailable"
+                    )
+
+                return AsyncPredictionResponse(
+                    task_id=task_id,
+                    status="queued",
+                    message="Prediction task has been queued for processing",
+                    event_id=prediction_data.event_id,
+                    estimated_processing_time_seconds=15, # Примерное время
+                    check_status_url=f"/api/events/predict-status/{task_id}"
+                )
+            except EventNotFoundException as e:
+                raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=e.message)
+            except Exception as e:
+                logger.error(f"Async prediction error: {e}")
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to queue prediction task")
+
+        # Новый эндпоинт для проверки статуса предсказания
+        @event_router.get("/predict-status/{task_id}", response_model=PredictionStatusResponse)
+        async def get_prediction_status(task_id: str):
+            """Получает статус и результат ML-предсказания по ID задачи."""
+            try:
+                # Здесь должна быть логика получения результата из очереди
+                # В вашем коде в ml_service/publisher.py уже есть метод get_result
+                # Но он блокирующий, поэтому в реальном FastAPI приложении его нужно обернуть в run_in_executor
+                result = EventService.get_prediction_result(task_id)
+
+                if not result:
+                    return PredictionStatusResponse(
+                        task_id=task_id,
+                        status="queued",
+                        message="Task is still in queue or not found"
+                    )
+
+                return PredictionStatusResponse(
+                    task_id=task_id,
+                    status=result.get("status"),
+                    result=result.get("prediction"),
+                    error=result.get("error"),
+                    event_id=result.get("event_id"),
+                    processed_at=result.get("processed_at")
+                )
+            except Exception as e:
+                logger.error(f"Get prediction status error: {e}")
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to get prediction status")
