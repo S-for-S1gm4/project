@@ -682,6 +682,7 @@ async def search_events(
                 logger.error(f"Async prediction error: {e}")
                 raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to queue prediction task")
 
+
         # Новый эндпоинт для проверки статуса предсказания
         @event_router.get("/predict-status/{task_id}", response_model=PredictionStatusResponse)
         async def get_prediction_status(task_id: str):

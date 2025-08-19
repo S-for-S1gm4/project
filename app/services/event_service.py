@@ -157,7 +157,7 @@ class EventService:
             from ml_service.publisher import ml_publisher
 
             # Проверяем существование пользователя и события
-            user = EventService.get_user_by_id_static(user_id)
+            user = UserService.get_user_by_id(user_id)
             event = EventService.get_event_by_id(event_id)
 
             if not user:
@@ -187,6 +187,19 @@ class EventService:
             return None
 
     @staticmethod
-    def get_user_by_id_static(user_id: int) -> Optional[User]:
-        """Вспомогательный метод для получения пользователя"""
-        return UserService.get_user_by_id(user_id)
+    def get_prediction_result(task_id: str) -> Optional[Dict]:
+        """
+        Получение результата ML предсказания
+
+        Args:
+            task_id: ID задачи предсказания
+
+        Returns:
+            Результат предсказания или None
+        """
+        try:
+            from ml_service.publisher import ml_publisher
+            return ml_publisher.get_result()
+        except Exception as e:
+            logger.error(f"Get prediction result error: {e}")
+            return None
