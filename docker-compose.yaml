@@ -90,6 +90,23 @@ services:
       retries: 3
       start_period: 40s
 
+  # Streamlit Frontend
+  streamlit_ui:
+    build:
+      context: ./streamlit_ui # Путь к папке с UI
+      dockerfile: Dockerfile
+    container_name: event-planner-streamlit
+    volumes:
+      - ./streamlit_ui:/app # Для live reload при разработке
+    # Порт 8501 не публикуем, Nginx будет проксировать
+    depends_on:
+      - app # UI запустится после бэкенда
+    networks:
+      - app-network
+    restart: unless-stopped
+    environment:
+      # Указываем Nginx как точку входа для API
+      - API_URL=http://nginx/api
   # Веб-прокси сервис на основе Nginx
   nginx:
     build:
