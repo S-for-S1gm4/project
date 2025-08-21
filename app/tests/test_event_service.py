@@ -1,4 +1,19 @@
-assert event.cost == 0.0
+import pytest
+from services.user_service import UserService
+from services.event_service import EventService
+
+class TestEventCreation:
+    """Тесты создания событий"""
+
+    def test_create_event_with_defaults(self, created_user):
+        """Тест создания события со значениями по умолчанию"""
+        event = EventService.create_event(
+            title="Default Event",
+            description="Test with defaults",
+            creator_id=created_user.id,
+            max_participants=100
+        )
+        assert event.cost == 0.0
         assert event.max_participants == 100
 
     def test_create_event_with_invalid_creator(self, clean_db):
